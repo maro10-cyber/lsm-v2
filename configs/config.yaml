@@ -1,0 +1,98 @@
+# LSM-V2 Configuration
+# Liquidity Sweep + MSS + FVG institutional execution model
+
+symbol:
+  name: "MNQ"
+  exchange: "CME"
+  tick_size: 0.25
+  point_value: 2.0           # $2 per point (Micro NQ)
+
+timeframes:
+  primary: "1m"              # Entry/detection timeframe
+  htf: "15m"                 # Higher timeframe for bias
+
+# ── Sessions (NY timezone) ───────────────────────────────────────────────────
+sessions:
+  timezone: "America/New_York"
+  asia:
+    start: "00:00"
+    end:   "07:00"
+  london:
+    start: "07:00"
+    end:   "09:30"
+  new_york:
+    start: "09:30"
+    end:   "16:00"
+    trade_cutoff: "15:30"    # No new entries after this
+
+# ── Liquidity Engine ─────────────────────────────────────────────────────────
+liquidity:
+  equal_tolerance_ticks: 2   # Max distance between two highs/lows to be "equal"
+  sweep_min_ticks: 4         # Min penetration beyond level to qualify as sweep
+  rejection_ratio: 1.5       # Wick must be >= body * ratio for rejection
+  lookback_bars: 50          # How many bars back to look for equal H/L
+
+# ── Structure Engine ─────────────────────────────────────────────────────────
+structure:
+  swing_lookback: 1          # Bars each side: high[i] > high[i-1] AND high[i] > high[i+1]
+  mss_lookback_bars: 30      # How far back to search for broken swing after sweep
+
+# ── FVG Engine ───────────────────────────────────────────────────────────────
+fvg:
+  min_size_ticks: 4          # Minimum gap size to qualify
+  max_age_bars: 50           # Invalidate after this many 1m bars (~50 min)
+  require_unmitigated: true
+
+# ── HTF Bias Engine ──────────────────────────────────────────────────────────
+bias:
+  min_score_bullish: 2       # Score >= 2 → bullish bias
+  min_score_bearish: -2      # Score <= -2 → bearish bias
+  # Scores: structure(±1) + vwap(±1) + liquidity(±1) + session(±1) = range -4..+4
+
+# ── Risk Management ──────────────────────────────────────────────────────────
+risk:
+  account_balance: 50000.0
+  risk_per_trade_pct: 1.0    # Start at 1% (progressive sizing applied)
+  max_daily_loss_pct: 2.0
+  max_consecutive_losses: 3
+  reward_risk_ratio: 2.0     # Fixed 1:2 R:R
+  sl_buffer_ticks: 3         # SL = sweep_high + 3 ticks (shorts) | sweep_low - 3 ticks (longs)
+  max_open_trades: 1
+  progressive_sizing:
+    enabled: true
+    levels_pct: [0.5, 1.0, 1.5]   # [low, mid, high]
+    start_level: 1                  # index into levels_pct
+
+# ── Execution ────────────────────────────────────────────────────────────────
+execution:
+  mode: "paper"              # "paper" | "live"
+  slippage_ticks: 1
+  commission_per_side: 0.50  # USD per contract per side
+
+# ── State Machine ────────────────────────────────────────────────────────────
+state_machine:
+  max_sweep_age_bars: 30     # Expire unmatched sweep after N 1m bars
+  max_mss_age_bars: 20       # Expire MSS waiting for FVG
+  max_fvg_age_bars: 50       # Expire FVG waiting for retrace
+  max_retrace_age_bars: 30   # Expire retrace watch
+
+# ── Filters ──────────────────────────────────────────────────────────────────
+filters:
+  require_htf_bias: true          # Must have HTF directional bias
+  session_filter: "NY_ONLY"       # "NY_ONLY" | "NY_AND_LONDON" | "ALL"
+  require_mss: true
+  require_rejected_sweep: true    # Sweep candle must show wick rejection
+  cooldown_after_trade_bars: 12   # Bars to wait after trade closes (12 × 5m = 1h)
+
+# ── Backtesting ──────────────────────────────────────────────────────────────
+backtest:
+  start_date: "2024-01-01"
+  end_date:   "2024-12-31"
+  initial_balance: 50000.0
+  commission_per_side: 0.50
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  level: "INFO"
+  log_dir: "logs/"
+  journal_enabled: true

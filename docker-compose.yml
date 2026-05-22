@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  backtest:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./configs:/app/configs
+    command:
+      - "--csv"
+      - "data/historical/MNQ_1m_2024.csv"
+      - "--config"
+      - "configs/config.yaml"
+      - "--start"
+      - "2024-01-01"
+      - "--end"
+      - "2024-12-31"
