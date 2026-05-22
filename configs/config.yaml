@@ -6,6 +6,8 @@ symbol:
   exchange: "CME"
   tick_size: 0.25
   point_value: 2.0           # $2 per point (Micro NQ)
+  ibkr_symbol: "MNQ"
+  ibkr_exchange: "CME"
 
 timeframes:
   primary: "1m"              # Entry/detection timeframe
@@ -91,16 +93,13 @@ backtest:
   initial_balance: 50000.0
   commission_per_side: 0.50
 
-# ── Tradovate Credentials ────────────────────────────────────────────────────
-# Override with env vars: TV_USERNAME, TV_PASSWORD, TV_CID, TV_SECRET, TV_DEMO
-tradovate:
-  username:    ""           # your Tradovate username
-  password:    ""           # your Tradovate password
-  app_id:      "LSM-v2"
-  app_version: "1.0"
-  cid:         ""           # API client ID (from Tradovate dev portal)
-  secret:      ""           # API secret
-  demo:        true         # true = demo account, false = live
+# ── Interactive Brokers ───────────────────────────────────────────────────────
+# Credentials set via environment variables (never hardcode here)
+ibkr:
+  host:      "ib-gateway"   # Docker service name (or "localhost" if running locally)
+  port:      4002            # 4002 = paper, 4001 = live
+  client_id: 1
+  account:   ""             # Set via IB_ACCOUNT env var
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging:

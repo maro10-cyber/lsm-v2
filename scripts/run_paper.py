@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.types import Direction, Trade
 from data.feed import HTFAggregator
-from data.tradovate_feed import TradovateFeed
+from data.ibkr_feed import IBKRFeed
 from execution.paper import PaperBroker
 from risk.manager import RiskManager
 from strategy.bias import BiasEngine
@@ -223,9 +223,7 @@ async def main(config_path: str) -> None:
     )
 
     trader = PaperTrader(config)
-    feed   = TradovateFeed(config)
-
-    await feed.authenticate()
+    feed   = IBKRFeed(config)
 
     # Graceful shutdown on Ctrl+C / SIGTERM
     loop = asyncio.get_running_loop()

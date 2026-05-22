@@ -1,6 +1,6 @@
 #!/bin/bash
-# Run this once on a fresh Ubuntu 22.04 AWS EC2 instance.
-# Recommended: t3.micro (free tier) or t3.small
+# Run once on a fresh Ubuntu 22.04 AWS EC2 instance.
+# Recommended: t3.small (IB Gateway needs ~1GB RAM)
 
 set -e
 
@@ -12,17 +12,14 @@ sudo systemctl start docker
 sudo usermod -aG docker ubuntu
 
 echo "=== Cloning repo ==="
-# Replace with your GitHub repo URL after pushing
-git clone https://github.com/YOUR_USERNAME/lsm-v2.git /home/ubuntu/lsm-v2
+git clone https://github.com/maro10-cyber/lsm-v2.git /home/ubuntu/lsm-v2
 cd /home/ubuntu/lsm-v2
 
 echo "=== Creating .env file ==="
 cat > .env <<EOF
-TV_USERNAME=your_tradovate_username
-TV_PASSWORD=your_tradovate_password
-TV_CID=your_cid
-TV_SECRET=your_secret
-TV_DEMO=true
+IB_USERNAME=nbhojz092
+IB_PASSWORD=YOUR_PAPER_PASSWORD_HERE
+IB_ACCOUNT=DUO386766
 EOF
 chmod 600 .env
 
@@ -37,6 +34,6 @@ sudo systemctl start lsm-paper
 
 echo ""
 echo "=== Done! ==="
-echo "Check logs:  sudo journalctl -u lsm-paper -f"
-echo "Or:          docker compose logs -f paper"
-echo "Edit creds:  nano /home/ubuntu/lsm-v2/.env && sudo systemctl restart lsm-paper"
+echo "Edit password first:  nano /home/ubuntu/lsm-v2/.env"
+echo "Then restart:         sudo systemctl restart lsm-paper"
+echo "Watch logs:           docker compose logs -f"
