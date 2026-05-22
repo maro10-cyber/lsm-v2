@@ -1,6 +1,24 @@
 version: "3.9"
 
 services:
+  paper:
+    build: .
+    restart: unless-stopped
+    environment:
+      - TV_USERNAME=${TV_USERNAME}
+      - TV_PASSWORD=${TV_PASSWORD}
+      - TV_CID=${TV_CID}
+      - TV_SECRET=${TV_SECRET}
+      - TV_DEMO=${TV_DEMO:-true}
+    volumes:
+      - ./logs:/app/logs
+      - ./configs:/app/configs
+    command:
+      - "python"
+      - "scripts/run_paper.py"
+      - "--config"
+      - "configs/config.yaml"
+
   backtest:
     build: .
     volumes:
@@ -8,6 +26,8 @@ services:
       - ./logs:/app/logs
       - ./configs:/app/configs
     command:
+      - "python"
+      - "scripts/run_backtest.py"
       - "--csv"
       - "data/historical/MNQ_1m_2024.csv"
       - "--config"

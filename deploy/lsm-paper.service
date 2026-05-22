@@ -1,0 +1,18 @@
+[Unit]
+Description=LSM-v2 Paper Trader
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/lsm-v2
+EnvironmentFile=/home/ubuntu/lsm-v2/.env
+ExecStart=/usr/bin/docker compose up paper
+ExecStop=/usr/bin/docker compose stop paper
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

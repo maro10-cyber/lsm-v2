@@ -9,5 +9,5 @@ COPY . .
 
 ENV PYTHONPATH=/app
 
-ENTRYPOINT ["python", "scripts/run_backtest.py"]
-CMD ["--help"]
+# Default: paper trading mode
+CMD ["python", "scripts/run_paper.py", "--config", "configs/config.yaml"]
