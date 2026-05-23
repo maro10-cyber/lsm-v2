@@ -211,16 +211,22 @@ async def main(config_path: str) -> None:
     log_dir = log_cfg.get("log_dir", "logs/")
     os.makedirs(log_dir, exist_ok=True)
 
-    logging.basicConfig(
-        level=getattr(logging, log_cfg.get("level", "INFO")),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(
-                os.path.join(log_dir, f"paper_{datetime.now().strftime('%Y%m%d')}.log")
-            ),
-        ],
+    # Configure root logger explicitly — basicConfig is a no-op if any handler
+    # already exists (e.g. added by ib_insync util.logToConsole at import time).
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(getattr(logging, log_cfg.get("level", "INFO")))
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(fmt)
+    fh = logging.FileHandler(
+        os.path.join(log_dir, f"paper_{datetime.now().strftime('%Y%m%d')}.log")
     )
+    fh.setFormatter(fmt)
+    root.addHandler(sh)
+    root.addHandler(fh)
+    # Quiet down ib_insync's own verbose loggers
+    logging.getLogger("ib_insync").setLevel(logging.WARNING)
 
     trader = PaperTrader(config)
     feed   = IBKRFeed(config)

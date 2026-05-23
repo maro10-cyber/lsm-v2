@@ -22,8 +22,6 @@ from core.types import Candle
 
 logger = logging.getLogger(__name__)
 
-util.logToConsole(logging.WARNING)   # suppress ib_insync noise
-
 
 class IBKRFeed:
     """

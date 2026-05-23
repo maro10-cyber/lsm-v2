@@ -35,6 +35,7 @@ services:
         condition: service_healthy
     environment:
       - IB_ACCOUNT=${IB_ACCOUNT}
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./logs:/app/logs
       - ./configs:/app/configs
