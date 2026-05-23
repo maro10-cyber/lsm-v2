@@ -1,9 +1,12 @@
 """
 Interactive Brokers real-time feed via ib_insync.
 
-Connects to IB Gateway (running in Docker on port 4002 for paper).
-Subscribes to MNQ front-month continuous futures 1m bars.
-Yields closed Candle objects as they complete.
+Connects to IB Gateway (running in Docker on port 4004 for paper).
+Uses reqHistoricalData(keepUpToDate=True) for 1m bars — this path works
+without a paid CME real-time data subscription.
+
+On startup it replays the last 2 trading days so the strategy engines
+(equal levels, structure, HTF bias) have historical context immediately.
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ import logging
 from datetime import datetime, timezone
 from typing import AsyncIterator, Optional
 
-from ib_insync import IB, Contract, RealTimeBar, util
+from ib_insync import IB, BarData, Contract, util
 
 from core.types import Candle
 
@@ -26,39 +29,31 @@ class IBKRFeed:
     """
     Async iterator yielding 1m Candles from IB Gateway.
 
-    Uses reqRealTimeBars (5s bars) aggregated to 1m internally,
-    so the first complete candle arrives after the first full minute.
+    Uses reqHistoricalData(keepUpToDate=True) which fires an updateEvent
+    callback each time a new 1m bar closes.  On startup it also replays
+    the last 2 trading days of history so the strategy has context.
     """
 
     def __init__(self, config: dict) -> None:
         ib_cfg = config.get("ibkr", {})
-        self._host    = ib_cfg.get("host", "ib-gateway")   # Docker service name
-        self._port    = ib_cfg.get("port", 4002)            # 4002 = paper, 4001 = live
+        self._host      = ib_cfg.get("host", "ib-gateway")
+        self._port      = ib_cfg.get("port", 4004)
         self._client_id = ib_cfg.get("client_id", 1)
-        self._account = ib_cfg.get("account", "")           # e.g. DU1234567
+        self._account   = ib_cfg.get("account", "")
 
         sym = config["symbol"]
         self._symbol   = sym.get("ibkr_symbol", "MNQ")
         self._exchange = sym.get("ibkr_exchange", "CME")
 
-        self._ib = IB()
-        self._loop: asyncio.AbstractEventLoop | None = None
-
-        # 1m aggregation state
-        self._bar_open:  Optional[float] = None
-        self._bar_high:  Optional[float] = None
-        self._bar_low:   Optional[float] = None
-        self._bar_close: Optional[float] = None
-        self._bar_vol:   float = 0.0
-        self._bar_minute: Optional[int] = None
-        self._bar_ts:    Optional[datetime] = None
+        self._ib   = IB()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._queue: asyncio.Queue = asyncio.Queue()
 
     # ── Connection ────────────────────────────────────────────────────────────
 
     async def connect(self) -> None:
-        max_attempts = 30          # retry for up to ~5 minutes
-        delay = 10                 # seconds between attempts
+        max_attempts = 30
+        delay = 10
         for attempt in range(1, max_attempts + 1):
             try:
                 await self._ib.connectAsync(
@@ -85,30 +80,44 @@ class IBKRFeed:
         await self.connect()
 
         contract = await self._resolve_contract()
-        logger.info(f"Resolved contract: {contract.localSymbol} conId={contract.conId} @ {contract.exchange}")
 
-        # Subscribe to 5s real-time bars
-        logger.info("Requesting real-time bars...")
-        bars = self._ib.reqRealTimeBars(
-            contract, 5, "TRADES", useRTH=False
+        # keepUpToDate=True: IB sends historical bars then keeps the list
+        # live, firing updateEvent(bars, has_new_bar) each time a bar closes.
+        logger.info("Subscribing to 1m historical bars (keepUpToDate)...")
+        bars_list = self._ib.reqHistoricalData(
+            contract,
+            endDateTime="",
+            durationStr="2 D",
+            barSizeSetting="1 min",
+            whatToShow="TRADES",
+            useRTH=False,
+            keepUpToDate=True,
         )
-        logger.info(f"Real-time bars subscription active (bars object: {bars})")
-        bars.updateEvent += self._on_bar
+        bars_list.updateEvent += self._on_bar_update
+        logger.info(
+            f"Subscription active — replaying {len(bars_list)} historical bars, "
+            "then live..."
+        )
 
-        logger.info("Entering 1m candle loop — waiting for first bar...")
+        # Replay historical bars immediately so engines have context
+        for bar in bars_list[:-1]:   # skip last (current, incomplete) bar
+            candle = self._bar_to_candle(bar)
+            if candle:
+                yield candle
+
+        logger.info("Historical replay done — entering live 1m candle loop...")
         try:
             while True:
-                # Yield completed 1m candles from the queue
                 candle = await self._queue.get()
                 yield candle
         finally:
-            self._ib.cancelRealTimeBars(bars)
+            self._ib.cancelHistoricalData(bars_list)
             await self.disconnect()
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
     async def _resolve_contract(self) -> Contract:
-        """Find the front-month MNQ contract using reqContractDetails (handles ambiguous results)."""
+        """Return the front-month MNQ contract."""
         contract = Contract(
             symbol=self._symbol,
             secType="FUT",
@@ -118,61 +127,45 @@ class IBKRFeed:
         details = await self._ib.reqContractDetailsAsync(contract)
         if not details:
             raise RuntimeError(f"No contract found for {self._symbol}")
-        # Sort by expiry ascending, pick the nearest (front month)
         details.sort(key=lambda d: d.contract.lastTradeDateOrContractMonth)
         front = details[0].contract
-        logger.info(f"Front-month contract: {front.localSymbol} expires={front.lastTradeDateOrContractMonth} conId={front.conId}")
+        logger.info(
+            f"Front-month: {front.localSymbol} "
+            f"expires={front.lastTradeDateOrContractMonth} conId={front.conId}"
+        )
         return front
 
-    def _on_bar(self, bars, has_new_bar: bool) -> None:
-        """Called every 5 seconds by ib_insync with updated bar data."""
-        if not bars:
+    def _on_bar_update(self, bars, has_new_bar: bool) -> None:
+        """Called by ib_insync when the bar list updates.
+
+        has_new_bar=True means a new bar just opened, so bars[-2] is the
+        bar that just completed.
+        """
+        if not has_new_bar or len(bars) < 2:
             return
-        bar: RealTimeBar = bars[-1]
-
-        # Bar timestamp (IB gives Unix seconds)
-        try:
-            ts = datetime.fromtimestamp(bar.time, tz=timezone.utc)
-        except Exception:
-            return
-
-        minute = ts.hour * 60 + ts.minute
-
-        if self._bar_minute is None:
-            # First bar
-            self._start_bar(bar, ts, minute)
-            return
-
-        if minute == self._bar_minute:
-            # Same minute — update running candle
-            self._bar_high  = max(self._bar_high,  bar.high)
-            self._bar_low   = min(self._bar_low,   bar.low)
-            self._bar_close = bar.close
-            self._bar_vol  += bar.volume
-        else:
-            # New minute — emit completed candle
-            closed = Candle(
-                timestamp=self._bar_ts,
-                open=self._bar_open,
-                high=self._bar_high,
-                low=self._bar_low,
-                close=self._bar_close,
-                volume=self._bar_vol,
-            )
-            if self._loop:
-                self._loop.call_soon_threadsafe(self._queue.put_nowait, closed)
+        candle = self._bar_to_candle(bars[-2])
+        if candle and self._loop:
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, candle)
             logger.debug(
-                f"1m candle: {closed.timestamp} O={closed.open} H={closed.high} "
-                f"L={closed.low} C={closed.close}"
+                f"1m candle: {candle.timestamp} O={candle.open} "
+                f"H={candle.high} L={candle.low} C={candle.close}"
             )
-            self._start_bar(bar, ts, minute)
 
-    def _start_bar(self, bar: RealTimeBar, ts: datetime, minute: int) -> None:
-        bar_ts = ts.replace(second=0, microsecond=0)
-        self._bar_open  = bar.open
-        self._bar_high  = bar.high
-        self._bar_low   = bar.low
-        self._bar_close = bar.close
-        self._bar_vol   = float(bar.volume)
-        self._bar_minute = minute
-        self._bar_ts    = bar_ts
+    @staticmethod
+    def _bar_to_candle(bar: BarData) -> Optional[Candle]:
+        try:
+            d = bar.date
+            if isinstance(d, datetime):
+                ts = d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+            else:
+                ts = datetime.fromtimestamp(float(d), tz=timezone.utc)
+            return Candle(
+                timestamp=ts,
+                open=float(bar.open),
+                high=float(bar.high),
+                low=float(bar.low),
+                close=float(bar.close),
+                volume=float(bar.volume),
+            )
+        except Exception:
+            return None
