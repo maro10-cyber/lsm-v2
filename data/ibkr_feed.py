@@ -56,10 +56,23 @@ class IBKRFeed:
     # ── Connection ────────────────────────────────────────────────────────────
 
     async def connect(self) -> None:
-        await self._ib.connectAsync(
-            self._host, self._port, clientId=self._client_id, timeout=20
-        )
-        logger.info(f"IB Gateway connected | {self._host}:{self._port}")
+        max_attempts = 30          # retry for up to ~5 minutes
+        delay = 10                 # seconds between attempts
+        for attempt in range(1, max_attempts + 1):
+            try:
+                await self._ib.connectAsync(
+                    self._host, self._port, clientId=self._client_id, timeout=20
+                )
+                logger.info(f"IB Gateway connected | {self._host}:{self._port}")
+                return
+            except Exception as exc:
+                if attempt == max_attempts:
+                    raise
+                logger.warning(
+                    f"IB Gateway not ready (attempt {attempt}/{max_attempts}): {exc} "
+                    f"— retrying in {delay}s..."
+                )
+                await asyncio.sleep(delay)
 
     async def disconnect(self) -> None:
         self._ib.disconnect()

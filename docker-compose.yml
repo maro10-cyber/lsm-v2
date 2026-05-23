@@ -17,13 +17,20 @@ services:
       - "5900:5900"   # VNC (optional, for debugging)
     volumes:
       - ib-gateway-data:/home/ibgateway/Jts
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/4002"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
 
   # LSM-v2 paper trader
   paper:
     build: .
     restart: unless-stopped
     depends_on:
-      - ib-gateway
+      ib-gateway:
+        condition: service_healthy
     environment:
       - IB_ACCOUNT=${IB_ACCOUNT}
     volumes:
