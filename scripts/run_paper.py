@@ -239,8 +239,16 @@ async def main(config_path: str) -> None:
     signal.signal(signal.SIGTERM, _shutdown)
 
     run_task = asyncio.create_task(trader.run(feed))
-    await asyncio.wait([run_task, stop], return_when=asyncio.FIRST_COMPLETED)
+    await asyncio.wait({run_task, stop}, return_when=asyncio.FIRST_COMPLETED)
     run_task.cancel()
+
+    # Log any exception so we can diagnose crashes (otherwise exits silently)
+    if run_task.done() and not run_task.cancelled():
+        exc = run_task.exception()
+        if exc:
+            logger.error("Paper trader crashed", exc_info=exc)
+            raise exc
+
     logger.info("Paper trader stopped.")
 
 

@@ -42,6 +42,7 @@ class IBKRFeed:
         self._exchange = sym.get("ibkr_exchange", "CME")
 
         self._ib = IB()
+        self._loop: asyncio.AbstractEventLoop | None = None
 
         # 1m aggregation state
         self._bar_open:  Optional[float] = None
@@ -63,6 +64,7 @@ class IBKRFeed:
                 await self._ib.connectAsync(
                     self._host, self._port, clientId=self._client_id, timeout=20
                 )
+                self._loop = asyncio.get_running_loop()
                 logger.info(f"IB Gateway connected | {self._host}:{self._port}")
                 return
             except Exception as exc:
@@ -152,9 +154,8 @@ class IBKRFeed:
                 close=self._bar_close,
                 volume=self._bar_vol,
             )
-            asyncio.get_event_loop().call_soon_threadsafe(
-                self._queue.put_nowait, closed
-            )
+            if self._loop:
+                self._loop.call_soon_threadsafe(self._queue.put_nowait, closed)
             logger.debug(
                 f"1m candle: {closed.timestamp} O={closed.open} H={closed.high} "
                 f"L={closed.low} C={closed.close}"
