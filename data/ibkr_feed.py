@@ -81,10 +81,12 @@ class IBKRFeed:
 
         contract = await self._resolve_contract()
 
-        # keepUpToDate=True: IB sends historical bars then keeps the list
-        # live, firing updateEvent(bars, has_new_bar) each time a bar closes.
+        # reqHistoricalDataAsync with keepUpToDate=True: awaits the initial
+        # history load, then returns a BarDataList that keeps updating live.
+        # Must use the async variant — the sync reqHistoricalData calls
+        # loop.run_until_complete() internally which fails inside asyncio.run().
         logger.info("Subscribing to 1m historical bars (keepUpToDate)...")
-        bars_list = self._ib.reqHistoricalData(
+        bars_list = await self._ib.reqHistoricalDataAsync(
             contract,
             endDateTime="",
             durationStr="2 D",
