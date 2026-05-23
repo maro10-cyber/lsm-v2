@@ -97,7 +97,7 @@ backtest:
 # Credentials set via environment variables (never hardcode here)
 ibkr:
   host:      "ib-gateway"   # Docker service name (or "localhost" if running locally)
-  port:      4002            # 4002 = paper, 4001 = live
+  port:      4004            # gnzsnz image uses 4004 for paper (4003 for live)
   client_id: 1
   account:   ""             # Set via IB_ACCOUNT env var
 

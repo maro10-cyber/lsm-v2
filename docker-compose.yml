@@ -15,12 +15,12 @@ services:
       - ACCEPT_INCOMING_CONNECTION=accept
       - READ_ONLY_API=no
     ports:
-      - "4002:4002"   # paper API port
+      - "4004:4004"   # paper API port (gnzsnz image default)
       - "5900:5900"   # VNC (optional, for debugging)
     volumes:
       - ib-gateway-data:/home/ibgateway/Jts
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/4002"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/4004"]
       interval: 15s
       timeout: 5s
       retries: 20
