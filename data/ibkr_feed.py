@@ -108,19 +108,21 @@ class IBKRFeed:
     # ── Internal ──────────────────────────────────────────────────────────────
 
     async def _resolve_contract(self) -> Contract:
-        """Find the front-month MNQ contract."""
+        """Find the front-month MNQ contract using reqContractDetails (handles ambiguous results)."""
         contract = Contract(
             symbol=self._symbol,
             secType="FUT",
             exchange=self._exchange,
             currency="USD",
         )
-        contracts = await self._ib.qualifyContractsAsync(contract)
-        if not contracts:
+        details = await self._ib.reqContractDetailsAsync(contract)
+        if not details:
             raise RuntimeError(f"No contract found for {self._symbol}")
-        # Pick the nearest expiry
-        contracts.sort(key=lambda c: c.lastTradeDateOrContractMonth)
-        return contracts[0]
+        # Sort by expiry ascending, pick the nearest (front month)
+        details.sort(key=lambda d: d.contract.lastTradeDateOrContractMonth)
+        front = details[0].contract
+        logger.info(f"Front-month contract: {front.localSymbol} expires={front.lastTradeDateOrContractMonth} conId={front.conId}")
+        return front
 
     def _on_bar(self, bars, has_new_bar: bool) -> None:
         """Called every 5 seconds by ib_insync with updated bar data."""
