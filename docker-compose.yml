@@ -12,6 +12,8 @@ services:
       - TRADING_MODE=paper
       - TWS_SETTINGS_PATH=/home/ibgateway/Jts
       - TWOFA_TIMEOUT_ACTION=exit
+      - ACCEPT_INCOMING_CONNECTION=accept
+      - READ_ONLY_API=no
     ports:
       - "4002:4002"   # paper API port
       - "5900:5900"   # VNC (optional, for debugging)
