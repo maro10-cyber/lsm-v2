@@ -85,14 +85,17 @@ class IBKRFeed:
         await self.connect()
 
         contract = await self._resolve_contract()
-        logger.info(f"Subscribed: {contract.localSymbol} @ {contract.exchange}")
+        logger.info(f"Resolved contract: {contract.localSymbol} conId={contract.conId} @ {contract.exchange}")
 
         # Subscribe to 5s real-time bars
+        logger.info("Requesting real-time bars...")
         bars = self._ib.reqRealTimeBars(
             contract, 5, "TRADES", useRTH=False
         )
+        logger.info(f"Real-time bars subscription active (bars object: {bars})")
         bars.updateEvent += self._on_bar
 
+        logger.info("Entering 1m candle loop — waiting for first bar...")
         try:
             while True:
                 # Yield completed 1m candles from the queue
